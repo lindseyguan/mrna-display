@@ -14,11 +14,6 @@ sys.path.insert(0, os.path.abspath('../'))
 codons = pd.read_csv('../ngs/codon_box.csv')
 codons_dict = dict(zip(codons['Codon'], codons['NNW1']))
 
-# Import codon box
-
-codons = pd.read_csv('../ngs/codon_box.csv')
-codons_dict = dict(zip(codons['Codon'], codons['NNW1']))
-
 for selection in range(1, 5):
     with open(f'../ngs/FASTQ/20211115_BI_R4_S{selection}.txt', 'r') as f:
         reads = []
