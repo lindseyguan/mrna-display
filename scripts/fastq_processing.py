@@ -28,13 +28,13 @@ for selection in range(1, 5):
         reads[i] = ''.join(reads[i])
 
     reads_df = pd.DataFrame(reads, columns=['Sequence'])
-    
+
     # Filter out sequences containing start and stop codons
     reads_df = reads_df[~reads_df['Sequence'].str.contains(r'-|\*|C')]
-    
+
     # Export without counts
     reads_df.to_csv(f'../seq/S{selection}_peptide.txt', index=None)
-    
+
     # Count each peptide
     reads_df = reads_df.groupby('Sequence').size().reset_index(name='Counts')
 
