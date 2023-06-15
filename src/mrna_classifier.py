@@ -42,11 +42,12 @@ class MrnaBaseClassifier(torch.nn.Module) :
 
 
 class MrnaBaggingPuClassifier:
-    def __init__(self, n_classifiers=3, batch_size=64, epochs=2, input_dim=1537,load_path=None):
+    def __init__(self, n_classifiers=5, batch_size=64, epochs=10, input_dim=1537, load_path=None, filter_aa=None):
         """
         n_classifiers: the number of base classifiers to train. Each is trained using a different
                        subsampling of unlabeled data.
         load_path: if we want to load an MrnaBaggingPuClassifier from a previously trained model
+        filter_aa: omit sequences that contain filter_aa. If None, we include all sequences in the training set
         """
         if load_path:
             with open(os.path.join(load_path, 'bagging_classifier_params.json'), 'r') as f:
@@ -70,9 +71,14 @@ class MrnaBaggingPuClassifier:
             self.epochs = epochs
             self.classifiers = []
             self.input_dim = input_dim
+        self.filter_aa = filter_aa
 
-    def fit(self, unlabeled_filenames, positive_filenames):
+    def fit(self, unlabeled_filenames, positive_filenames, unlabeled_sample_size=None):
         self.classifiers = []
+
+        filenames = [(f, 0) for f in unlabeled_filenames]
+        for f in positive_filenames:
+            filenames.append((f, 1))
 
         # Check if GPU is available
         if torch.backends.mps.is_available() and torch.backends.mps.is_built():
@@ -85,33 +91,32 @@ class MrnaBaggingPuClassifier:
             optimizer = torch.optim.Adam(classifier.parameters())
             loss_fn = torch.nn.BCELoss()
 
-            for unlabeled_filename, positive_filename in zip(unlabeled_filenames, positive_filenames):
-                # Train
-                unlabeled = MrnaDisplayDataset(unlabeled_filename, positive=0)
-                labeled = MrnaDisplayDataset(positive_filename, positive=1)
-                n_unlabeled = len(unlabeled)
-                n_labeled = len(labeled)
+            for epoch in tqdm(range(self.epochs)):
+                for filename, is_labeled in filenames:
+                    # Train
+                    dataset = MrnaDisplayDataset(filename, positive=is_labeled, filter_aa=self.filter_aa)
 
-                # Sample from unlabeled data
-                indices_unlabeled = torch.randint(high=n_unlabeled, size=(n_labeled,))
-                unlabeled.set_indices(indices_unlabeled)
+                    if len(dataset) == 0:
+                        continue
+                    
+                    # Sample from unlabeled data (half because we have roughly twice as much
+                    # unlabeled data)
+                    if is_labeled == 0:
+                        indices_unlabeled = torch.randint(high=len(dataset), size=(int(len(dataset) / 2),))
+                        dataset.set_indices(indices_unlabeled)
 
-                # Create dataloader
-                print(f'Creating dataloader for {unlabeled_filename} and {positive_filename}')     
-                dataset = ConcatDataset([unlabeled, labeled])
-                sampler = SubsetRandomSampler(list(range(len(dataset))))
-                dataloader = DataLoader(dataset, 
-                                        sampler=sampler, 
-                                        batch_size=self.batch_size,
-                                        pin_memory=True)
+                    # Create dataloader
+                    sampler = SubsetRandomSampler(list(range(len(dataset))))
+                    dataloader = DataLoader(dataset, 
+                                            sampler=sampler, 
+                                            batch_size=self.batch_size,
+                                            pin_memory=True)
 
-                for epoch in tqdm(range(self.epochs)):
                     for X_batch, y_batch in dataloader:
                         X_batch = X_batch.to(device)
                         y_batch = y_batch.to(device)
                         y_pred = classifier(X_batch)
                         loss = loss_fn(y_pred, y_batch.float().unsqueeze(1))
-                        print(loss)
                         optimizer.zero_grad(set_to_none=True)
                         loss.backward()
                         optimizer.step()
@@ -139,15 +144,6 @@ class MrnaBaggingPuClassifier:
     def predict(self, X, threshold=0.5):
         probas = self.predict_proba(X)
         return (probas >= threshold).int()
-
-
-    def evaluate(self, X, y_true):
-        """
-        TODO: Add F1 score. For now, it's roc_auc assuming unlabeled = negative.
-        """
-        y_pred = self.predict(X)
-        auc = roc_auc_score(y_true, y_pred)
-        print(f'AUC: {auc}')
 
 
     def save(self, output_dir):

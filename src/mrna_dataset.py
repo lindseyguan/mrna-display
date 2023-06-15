@@ -10,10 +10,12 @@ PyTorch Dataset for MrnaDisplay learning.
 """
 
 class MrnaDisplayDataset(Dataset):
-    def __init__(self, filename, positive, indices=None):
+    def __init__(self, filename, positive=None, indices=None, filter_aa=None):
         self.filename = filename
         self.positive = positive
         self.data = pd.read_csv(filename).fillna(0)
+        if filter_aa:
+            self.data = self.data[~self.data['Sequence'].str.contains(filter_aa)]
 
         if indices:
             self.indices = indices
@@ -21,10 +23,11 @@ class MrnaDisplayDataset(Dataset):
         else:
             self.indices = None
 
-        if self.positive:
-            self.data['label'] = 1
-        else:
-            self.data['label'] = 0
+        if 'label' not in self.data.columns:
+            if self.positive:
+                self.data['label'] = 1
+            else:
+                self.data['label'] = 0
 
         self.num_samples = len(self.data)
 
