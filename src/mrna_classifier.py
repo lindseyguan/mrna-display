@@ -1,12 +1,16 @@
 import json
 import os
 import pandas as pd
+import random
+from tqdm import tqdm
+
 import torch
 from torch import nn
 import torch.utils.data as data
-from tqdm import tqdm
+
 from sklearn.metrics import roc_auc_score
 from torch.utils.data import DataLoader, SubsetRandomSampler, ConcatDataset
+
 from mrna_dataset import MrnaDisplayDataset
 
 """
@@ -73,12 +77,14 @@ class MrnaBaggingPuClassifier:
             self.input_dim = input_dim
         self.filter_aa = filter_aa
 
+
     def fit(self, unlabeled_filenames, positive_filenames, unlabeled_sample_size=None):
         self.classifiers = []
 
         filenames = [(f, 0) for f in unlabeled_filenames]
         for f in positive_filenames:
             filenames.append((f, 1))
+        random.shuffle(filenames)
 
         # Check if GPU is available
         if torch.backends.mps.is_available() and torch.backends.mps.is_built():
@@ -98,7 +104,7 @@ class MrnaBaggingPuClassifier:
 
                     if len(dataset) == 0:
                         continue
-                    
+
                     # Sample from unlabeled data (half because we have roughly twice as much
                     # unlabeled data)
                     if is_labeled == 0:
@@ -136,7 +142,8 @@ class MrnaBaggingPuClassifier:
             for classifier in self.classifiers:
                 classifier.to(device)
                 classifier.eval()
-                probas += classifier(X.to(device)).squeeze()
+                pred = classifier(X.to(device)).squeeze()
+                probas += pred
 
             return torch.div(probas, self.n_classifiers)
 

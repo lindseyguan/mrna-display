@@ -15,7 +15,10 @@ class MrnaDisplayDataset(Dataset):
         self.positive = positive
         self.data = pd.read_csv(filename).fillna(0)
         if filter_aa:
-            self.data = self.data[~self.data['Sequence'].str.contains(filter_aa)]
+            if filter_aa[0] == '!':
+                self.data = self.data[~self.data['Sequence'].str.contains(filter_aa[1])]
+            else:
+                self.data = self.data[self.data['Sequence'].str.contains(filter_aa)]
 
         if indices:
             self.indices = indices
@@ -49,4 +52,5 @@ class MrnaDisplayDataset(Dataset):
         X = torch.tensor(X, dtype=torch.float32)
         y = torch.tensor(y, dtype=torch.float32)
 
-        return X, y
+        seq = self.data.iloc[index]['Sequence']
+        return X, y, seq

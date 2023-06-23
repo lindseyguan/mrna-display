@@ -40,7 +40,7 @@ ONE_2_ALL ={'A': ('A', 'ALA', 'alanine'),
 
 AMINO_ACIDS = list(ONE_2_ALL.keys())
 
-def f1_score(y_pred, y_true, threshold=0.5):
+def f1_score(y_true, y_pred, threshold=0.5):
     """
     Returns F1 score as implemented in Tabatabaei, et al.
     """

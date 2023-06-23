@@ -26,8 +26,7 @@ DATA_DIR = '/Users/lindseyguan/Documents/Merck/data/dev/'
 MODEL_DIR = '/Users/lindseyguan/Documents/Merck/src/models/dev'
 
 for aa in tqdm(AMINO_ACIDS):
-    print(aa)
-    if aa in ['C', 'M']: # not included in our library
+    if aa in ['C', 'M']:
         continue
     model = MrnaBaggingPuClassifier(filter_aa=aa)
     start = time.time()
@@ -45,18 +44,3 @@ for aa in tqdm(AMINO_ACIDS):
         os.makedirs(os.path.join(MODEL_DIR, f'omit_{aa}'))
 
     model.save(os.path.join(MODEL_DIR, f'omit_{aa}'))
-
-model = MrnaBaggingPuClassifier()
-start = time.time()
-
-unlabeled_files = [os.path.join(DATA_DIR, f'train/S1_ap_{i}_train.csv') for i in range(1, 23)]
-labeled_files = [os.path.join(DATA_DIR, f'train/S4_ap_{i}_train.csv') for i in range(1, 14)]
-
-model.fit(unlabeled_filenames=unlabeled_files, 
-          positive_filenames=labeled_files)
-
-end = time.time()
-print('time', end - start)
-
-model.save(MODEL_DIR)
-
