@@ -46,12 +46,16 @@ class MrnaBaseClassifier(torch.nn.Module) :
 
 
 class MrnaBaggingPuClassifier:
-    def __init__(self, n_classifiers=5, batch_size=64, epochs=10, input_dim=1537, load_path=None, filter_aa=None):
+    def __init__(self, n_classifiers=5, batch_size=64, epochs=10, input_dim=1537, 
+                 load_path=None, 
+                 filter_aa=None,
+                 sample=1):
         """
         n_classifiers: the number of base classifiers to train. Each is trained using a different
                        subsampling of unlabeled data.
         load_path: if we want to load an MrnaBaggingPuClassifier from a previously trained model
         filter_aa: omit sequences that contain filter_aa. If None, we include all sequences in the training set
+        sample: fraction of input DataFrames to sample
         """
         if load_path:
             with open(os.path.join(load_path, 'bagging_classifier_params.json'), 'r') as f:
@@ -76,6 +80,7 @@ class MrnaBaggingPuClassifier:
             self.classifiers = []
             self.input_dim = input_dim
         self.filter_aa = filter_aa
+        self.sample = sample
 
 
     def fit(self, unlabeled_filenames, positive_filenames, unlabeled_sample_size=None):
@@ -100,7 +105,10 @@ class MrnaBaggingPuClassifier:
             for epoch in tqdm(range(self.epochs)):
                 for filename, is_labeled in filenames:
                     # Train
-                    dataset = MrnaDisplayDataset(filename, positive=is_labeled, filter_aa=self.filter_aa)
+                    dataset = MrnaDisplayDataset(filename, 
+                                                 positive=is_labeled, 
+                                                 filter_aa=self.filter_aa,
+                                                 sample=self.sample)
 
                     if len(dataset) == 0:
                         continue
