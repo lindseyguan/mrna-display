@@ -22,16 +22,16 @@ from mrna_classifier import MrnaBaggingPuClassifier
 from utils import AMINO_ACIDS
 
 
-DATA_DIR = '/Users/lindseyguan/Documents/Merck/data/split/'
-MODEL_DIR = '/Users/lindseyguan/Documents/Merck/src/models/prod_full'
+DATA_DIR = '../data/split/'
+MODEL_DIR = '../src/models/prod_full'
 
 
 # Train baseline model
-model = MrnaBaggingPuClassifier(sample=1)
+model = MrnaBaggingPuClassifier(sample=0.1, batch_size=256)
 start = time.time()
 
-unlabeled_files = [os.path.join(DATA_DIR, f'train/S1_ap_{i}_GStrain_clean.csv') for i in range(1, 23)]
-labeled_files = [os.path.join(DATA_DIR, f'train/S4_ap_{i}_GStrain_clean.csv') for i in range(1, 14)]
+unlabeled_files = [os.path.join(DATA_DIR, f'train/S1_ap_{i}_GStrain_clean.csv') for i in range(23)]
+labeled_files = [os.path.join(DATA_DIR, f'train/S4_ap_{i}_GStrain_clean.csv') for i in range(12)]
 
 model.fit(unlabeled_filenames=unlabeled_files, 
           positive_filenames=labeled_files)
@@ -39,7 +39,7 @@ model.fit(unlabeled_filenames=unlabeled_files,
 end = time.time()
 print('time', end - start)
 
-if not os.path.exists(os.path.join(MODEL_DIR, f'gs_prod_full')):
-    os.makedirs(os.path.join(MODEL_DIR, f'gs_prod_full'))
+if not os.path.exists(os.path.join(MODEL_DIR, f'gs_prod_0.1')):
+    os.makedirs(os.path.join(MODEL_DIR, f'gs_prod_0.1'))
 
-model.save(os.path.join(MODEL_DIR, f'gs_prod_full'))
+model.save(os.path.join(MODEL_DIR, f'gs_prod_0.1'))

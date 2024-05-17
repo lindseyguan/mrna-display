@@ -17,12 +17,12 @@ from utils import f1_score
 
 
 DATA_DIR = '../data/split'
-MODEL_DIR = './models/prod_full/prod_0.1'
+MODEL_DIR = './models/prod_full/gs_prod_0.1'
 
 model = MrnaBaggingPuClassifier(load_path=MODEL_DIR)
 
-validation_files_unlabeled = [os.path.join(DATA_DIR, f'val/S1_ap_{i}_val_clean.csv') for i in range(20)]
-validation_files_labeled = [os.path.join(DATA_DIR, f'val/S4_ap_{i}_val_clean.csv') for i in range(12)]
+validation_files_unlabeled = [os.path.join(DATA_DIR, f'val/S1_ap_{i}_GSval_clean.csv') for i in range(20)]
+validation_files_labeled = [os.path.join(DATA_DIR, f'val/S4_ap_{i}_GSval_clean.csv') for i in range(12)]
 
 filenames = [(f, 0) for f in validation_files_unlabeled]
 for f in validation_files_labeled:
@@ -66,4 +66,8 @@ for filename, is_labeled in tqdm(filenames, desc='files'):
     y_pred_all = y_pred_all + y_pred
 
 df = pd.DataFrame([sequence_all, y_true_all, y_pred_all]).T
-df.to_csv(os.path.join(DATA_DIR, 'val/predictions.csv'))
+df.to_csv(os.path.join(DATA_DIR, 'val/predictions_gs.csv'))
+
+print('log loss', log_loss(y_true_all, y_pred_all))
+print('roc auc', roc_auc_score(y_true_all, y_pred_all))
+print('f1 score', f1_score(y_true_all, y_pred_all))

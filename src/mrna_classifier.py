@@ -46,7 +46,11 @@ class MrnaBaseClassifier(torch.nn.Module) :
 
 
 class MrnaBaggingPuClassifier:
-    def __init__(self, n_classifiers=5, batch_size=64, epochs=10, input_dim=1537, 
+    def __init__(self, 
+                 n_classifiers=5, 
+                 batch_size=64, 
+                 epochs=10, 
+                 input_dim=1537, 
                  load_path=None, 
                  filter_aa=None,
                  sample=1):
@@ -69,7 +73,7 @@ class MrnaBaggingPuClassifier:
 
             for i in range(self.n_classifiers):
                 classifier = torch.load(os.path.join(load_path, f'classifier_{i}.pt'))
-                model = MrnaBaseClassifier(self.input_dim, hidden_dim=10)
+                model = MrnaBaseClassifier(self.input_dim, hidden_dim=64)
                 model.load_state_dict(classifier)
                 model.eval()
                 self.classifiers.append(model)
@@ -94,16 +98,22 @@ class MrnaBaggingPuClassifier:
         # Check if GPU is available
         if torch.backends.mps.is_available() and torch.backends.mps.is_built():
             device = torch.device('mps')
+            print(f'Using torch+MPS, device {device}')
+        elif torch.cuda.is_available():
+            device = torch.cuda.current_device()
+            print(f'Using torch+CUDA, device {device}')
         else:
             device = torch.device('cpu')
+            print('Using CPU!')
 
-        for i in tqdm(range(self.n_classifiers)):
-            classifier = MrnaBaseClassifier(input_dim=self.input_dim, hidden_dim=10).to(device)
+        losses = []
+        for i in tqdm(range(self.n_classifiers), desc='classifier'):
+            classifier = MrnaBaseClassifier(input_dim=self.input_dim, hidden_dim=64).to(device)
             optimizer = torch.optim.Adam(classifier.parameters())
             loss_fn = torch.nn.BCELoss()
 
-            for epoch in tqdm(range(self.epochs)):
-                for filename, is_labeled in filenames:
+            for epoch in tqdm(range(self.epochs), desc='epoch'):
+                for filename, is_labeled in tqdm(filenames, desc='files'):
                     # Train
                     dataset = MrnaDisplayDataset(filename, 
                                                  positive=is_labeled, 
@@ -131,20 +141,29 @@ class MrnaBaggingPuClassifier:
                         y_batch = y_batch.to(device)
                         y_pred = classifier(X_batch)
                         loss = loss_fn(y_pred, y_batch.float().unsqueeze(1))
-                        optimizer.zero_grad(set_to_none=True)
+                        optimizer.zero_grad()
                         loss.backward()
+                        losses.append(loss.item())
                         optimizer.step()
 
             self.classifiers.append(classifier)
+        print(losses)
 
-
-    def predict_proba(self, X):
+    def predict_proba(self, X, device=None):
         """
         Returns probability of X being positive in the inductive
         positive-unlabeled learning regime.
         """
         with torch.no_grad():
-            device = torch.device('mps' if torch.cuda.is_available() else 'cpu')
+            if not device:
+                # Check if GPU is available
+                if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                    device = torch.device('mps')
+                elif torch.cuda.is_available():
+                    device = torch.cuda.current_device()
+                else:
+                    device = torch.device('cpu')
+
             probas = torch.zeros(len(X), device=device)
 
             for classifier in self.classifiers:
@@ -172,3 +191,4 @@ class MrnaBaggingPuClassifier:
 
         for i in range(self.n_classifiers):
             torch.save(self.classifiers[i].state_dict(), os.path.join(output_dir, f"classifier_{i}.pt"))
+

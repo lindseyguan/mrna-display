@@ -16,21 +16,8 @@ from mrna_classifier import MrnaBaggingPuClassifier
 from utils import f1_score
 
 
-DATA_DIR = '../data/split'
-MODEL_DIR = './models/prod_full/prod_0.1'
-
-model = MrnaBaggingPuClassifier(load_path=MODEL_DIR)
-
-validation_files_unlabeled = [os.path.join(DATA_DIR, f'val/S1_ap_{i}_val_clean.csv') for i in range(20)]
-validation_files_labeled = [os.path.join(DATA_DIR, f'val/S4_ap_{i}_val_clean.csv') for i in range(12)]
-
-filenames = [(f, 0) for f in validation_files_unlabeled]
-for f in validation_files_labeled:
-    filenames.append((f, 1))
-
-sequence_all = []
-y_true_all = []
-y_pred_all = []
+files = ['../data/exp/exp_feat.csv', '../data/exp/exp_feat_gs.csv']
+models = ['./models/dev/dev', './models/dev/gs_dev']
 
 # Check if GPU is available
 if torch.backends.mps.is_available() and torch.backends.mps.is_built():
@@ -42,28 +29,25 @@ elif torch.cuda.is_available():
 else:
     device = torch.device('cpu')
     print('Using CPU!')
+    
 
-for filename, is_labeled in tqdm(filenames, desc='files'):
+for filename, model in zip(files, models):
+    model = MrnaBaggingPuClassifier(load_path=model)
+
+    # Test
     dataset = MrnaDisplayDataset(filename, 
-                                 positive=is_labeled, 
-                                 eval_mode=True,
-                                 sample=0.1
+                                 eval_mode=True
                                 )
     dataloader = DataLoader(dataset)
 
     sequence = []
-    y_true = []
     y_pred = []
 
     for X, y, seq in dataloader:
         sequence.append(seq[0])
-        y_true.append(y.item())
         pred = model.predict_proba(X, device=0).item()
         y_pred.append(pred)
 
-    sequence_all = sequence_all + sequence
-    y_true_all = y_true_all + y_true
-    y_pred_all = y_pred_all + y_pred
-
-df = pd.DataFrame([sequence_all, y_true_all, y_pred_all]).T
-df.to_csv(os.path.join(DATA_DIR, 'val/predictions.csv'))
+    df = pd.DataFrame([sequence, y_pred]).T
+    df.to_csv(filename.replace('feat', 'pred'))
+    print(filename.replace('feat', 'pred'))

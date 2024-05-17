@@ -36,6 +36,9 @@ class MrnaDisplayDataset(Dataset):
             else:
                 self.data['label'] = 0
 
+        if "Unnamed: 0" in self.data.columns:
+            self.data = self.data.drop(columns=["Unnamed: 0"])
+
         self.num_samples = len(self.data)
         self.eval_mode = eval_mode
 
