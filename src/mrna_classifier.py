@@ -53,6 +53,7 @@ class MrnaBaggingPuClassifier:
                  input_dim=1537, 
                  load_path=None, 
                  filter_aa=None,
+                 device=torch.device('cpu'),
                  sample=1):
         """
         n_classifiers: the number of base classifiers to train. Each is trained using a different
@@ -72,7 +73,8 @@ class MrnaBaggingPuClassifier:
             self.classifiers = []
 
             for i in range(self.n_classifiers):
-                classifier = torch.load(os.path.join(load_path, f'classifier_{i}.pt'))
+                classifier = torch.load(os.path.join(load_path, f'classifier_{i}.pt'), 
+                    map_location=device)
                 model = MrnaBaseClassifier(self.input_dim, hidden_dim=64)
                 model.load_state_dict(classifier)
                 model.eval()
@@ -173,6 +175,34 @@ class MrnaBaggingPuClassifier:
                 probas += pred
 
             return torch.div(probas, self.n_classifiers)
+
+    def predict_proba_all(self, X, device=None):
+        """
+        Returns probability of X being positive in the inductive
+        positive-unlabeled learning regime.
+
+        Returns array of all model predictions
+        """
+        all_probas = []
+        with torch.no_grad():
+            if not device:
+                # Check if GPU is available
+                if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                    device = torch.device('mps')
+                elif torch.cuda.is_available():
+                    device = torch.cuda.current_device()
+                else:
+                    device = torch.device('cpu')
+
+            probas = torch.zeros(len(X), device=device)
+
+            for classifier in self.classifiers:
+                classifier.to(device)
+                classifier.eval()
+                pred = classifier(X.to(device)).squeeze()
+                all_probas.append(pred)
+
+            return all_probas
 
 
     def predict(self, X, threshold=0.5):
