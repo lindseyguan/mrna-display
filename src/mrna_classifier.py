@@ -53,7 +53,6 @@ class MrnaBaggingPuClassifier:
                  input_dim=1537, 
                  load_path=None, 
                  filter_aa=None,
-                 device=torch.device('cpu'),
                  sample=1):
         """
         n_classifiers: the number of base classifiers to train. Each is trained using a different
@@ -73,10 +72,24 @@ class MrnaBaggingPuClassifier:
             self.classifiers = []
 
             for i in range(self.n_classifiers):
-                classifier = torch.load(os.path.join(load_path, f'classifier_{i}.pt'), 
-                    map_location=device)
+                # Check if GPU is available
+                if torch.backends.mps.is_available() and torch.backends.mps.is_built():
+                    device = torch.device('mps')
+                    print(f'Using torch+MPS, device {device}')
+                elif torch.cuda.is_available():
+                    device = torch.cuda.current_device()
+                    print(f'Using torch+CUDA, device {device}')
+                else:
+                    device = torch.device('cpu')
+                    print('Using CPU!')
+
+                # classifier = torch.load(os.path.join(load_path, f'classifier_{i}.pt'),
+                #                         map_location=device
+                #                        )
+                classifier = torch.load(os.path.join(load_path, f'classifier_{i}.pt'))
                 model = MrnaBaseClassifier(self.input_dim, hidden_dim=64)
                 model.load_state_dict(classifier)
+                model.to(device)
                 model.eval()
                 self.classifiers.append(model)
         else:
@@ -92,11 +105,6 @@ class MrnaBaggingPuClassifier:
     def fit(self, unlabeled_filenames, positive_filenames, unlabeled_sample_size=None):
         self.classifiers = []
 
-        filenames = [(f, 0) for f in unlabeled_filenames]
-        for f in positive_filenames:
-            filenames.append((f, 1))
-        random.shuffle(filenames)
-
         # Check if GPU is available
         if torch.backends.mps.is_available() and torch.backends.mps.is_built():
             device = torch.device('mps')
@@ -108,11 +116,19 @@ class MrnaBaggingPuClassifier:
             device = torch.device('cpu')
             print('Using CPU!')
 
-        losses = []
+        classifier_losses = {}
         for i in tqdm(range(self.n_classifiers), desc='classifier'):
             classifier = MrnaBaseClassifier(input_dim=self.input_dim, hidden_dim=64).to(device)
             optimizer = torch.optim.Adam(classifier.parameters())
             loss_fn = torch.nn.BCELoss()
+            losses = []
+
+            # Sample from unlabeled data (half because we have roughly twice as much
+            # unlabeled data)
+            filenames = [(f, 0) for f in unlabeled_filenames][:int(len(unlabeled_filenames) / 2)]
+            for f in positive_filenames:
+                filenames.append((f, 1))
+            random.shuffle(filenames)
 
             for epoch in tqdm(range(self.epochs), desc='epoch'):
                 for filename, is_labeled in tqdm(filenames, desc='files'):
@@ -125,16 +141,8 @@ class MrnaBaggingPuClassifier:
                     if len(dataset) == 0:
                         continue
 
-                    # Sample from unlabeled data (half because we have roughly twice as much
-                    # unlabeled data)
-                    if is_labeled == 0:
-                        indices_unlabeled = torch.randint(high=len(dataset), size=(int(len(dataset) / 2),))
-                        dataset.set_indices(indices_unlabeled)
-
                     # Create dataloader
-                    sampler = SubsetRandomSampler(list(range(len(dataset))))
-                    dataloader = DataLoader(dataset, 
-                                            sampler=sampler, 
+                    dataloader = DataLoader(dataset,
                                             batch_size=self.batch_size,
                                             pin_memory=True)
 
@@ -148,8 +156,12 @@ class MrnaBaggingPuClassifier:
                         losses.append(loss.item())
                         optimizer.step()
 
+            optimizer.zero_grad()
+            classifier.to('cpu') # Move model back to CPU
             self.classifiers.append(classifier)
-        print(losses)
+            classifier_losses[i] = losses
+        return classifier_losses
+
 
     def predict_proba(self, X, device=None):
         """
@@ -175,6 +187,12 @@ class MrnaBaggingPuClassifier:
                 probas += pred
 
             return torch.div(probas, self.n_classifiers)
+
+
+    def predict(self, X, threshold=0.5):
+        probas = self.predict_proba(X)
+        return (probas >= threshold).int()
+
 
     def predict_proba_all(self, X, device=None):
         """
@@ -203,11 +221,6 @@ class MrnaBaggingPuClassifier:
                 all_probas.append(pred)
 
             return all_probas
-
-
-    def predict(self, X, threshold=0.5):
-        probas = self.predict_proba(X)
-        return (probas >= threshold).int()
 
 
     def save(self, output_dir):
